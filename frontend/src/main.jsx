@@ -17,11 +17,17 @@ function App() {
   const [status, setStatus] = useState(null);
   const [analytics, setAnalytics] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [theme, setTheme] = useState(localStorage.getItem("theme") || "dark");
 
   function showToast(text) {
     setToast(text);
     setTimeout(() => setToast(""), 2600);
   }
+
+  useEffect(() => {
+    document.body.dataset.theme = theme;
+    localStorage.setItem("theme", theme);
+  }, [theme]);
 
   async function authSubmit() {
     const endpoint = mode === "login" ? "/api/auth/login" : "/api/auth/register";
@@ -87,6 +93,9 @@ function App() {
     }
   }, [token]);
 
+  const latestEvent = events[0] || {};
+  const live = status || latestEvent || {};
+
   const stats = useMemo(() => {
     const total = events.length;
     const falls = events.filter((e) => String(e.type).toLowerCase() === "fall").length;
@@ -96,17 +105,16 @@ function App() {
     const avgBattery =
       total > 0
         ? Math.round(events.reduce((sum, e) => sum + Number(e.battery || 0), 0) / total)
-        : status?.battery ?? 88;
+        : live?.battery ?? 88;
 
     const avgGsm =
       total > 0
         ? Math.round(events.reduce((sum, e) => sum + Number(e.gsm || 0), 0) / total)
-        : status?.gsm ?? 70;
+        : live?.gsm ?? 70;
 
     const fallRate = total > 0 ? Math.round((falls / total) * 100) : 0;
     const sosRate = total > 0 ? Math.round((sos / total) * 100) : 0;
     const healthScore = Math.round((avgBattery + avgGsm) / 2);
-    const latest = events[0];
 
     return {
       total: analytics?.totalEvents ?? total,
@@ -118,10 +126,36 @@ function App() {
       fallRate,
       sosRate,
       healthScore,
-      latestType: latest?.type || "No incident",
-      lastUpdate: latest?.createdAt || latest?.timestamp || latest?.time || "No update yet",
+      latestType: latestEvent?.type || "No incident",
+      lastUpdate:
+        latestEvent?.createdAt || latestEvent?.timestamp || latestEvent?.time || "No update yet",
     };
-  }, [events, analytics, status]);
+  }, [events, analytics, live]);
+
+  const batteryValue = live?.battery ?? stats.avgBattery;
+  const batteryVoltage = live?.batteryVoltage ?? live?.voltage ?? "N/A";
+  const powerStatus = live?.powerStatus || live?.power || "Unknown";
+
+  const batteryState =
+    live?.charging === true
+      ? "Charging"
+      : live?.charging === false
+      ? "Not charging"
+      : batteryValue >= 95
+      ? "Fully charged"
+      : batteryValue <= 20
+      ? "Low battery"
+      : "Battery status unknown";
+
+  const networkType =
+    live?.networkType ||
+    live?.network ||
+    live?.connection ||
+    (live?.gsm ? "GSM" : "Wi-Fi / Internet");
+
+  const wifiStatus = live?.wifiStatus || "unknown";
+  const gsmStatus = live?.gsmStatus || "unknown";
+  const acceleration = live?.acceleration ?? "N/A";
 
   function logout() {
     localStorage.removeItem("token");
@@ -131,18 +165,25 @@ function App() {
 
   function exportCSV() {
     const rows = [
-      ["Time", "Device", "Type", "Battery", "GSM"],
+      ["Time", "Device", "Type", "Acceleration", "Battery", "Voltage", "Charging", "Power", "Network", "WiFi", "GSM", "Signal"],
       ...events.map((e) => [
         e.createdAt || e.timestamp || e.time || "",
         e.deviceId || "ESP32-FD-001",
         e.type || "event",
+        e.acceleration ?? "",
         e.battery ?? "",
+        e.batteryVoltage ?? e.voltage ?? "",
+        e.charging ?? "",
+        e.powerStatus || e.power || "",
+        e.networkType || e.network || "",
+        e.wifiStatus || "",
+        e.gsmStatus || "",
         e.gsm ?? "",
       ]),
     ];
 
     const csv = rows
-      .map((row) => row.map((v) => `\"${String(v).replaceAll('\"', '\"\"')}\"`).join(","))
+      .map((row) => row.map((v) => `"${String(v).replaceAll('"', '""')}"`).join(","))
       .join("\n");
 
     const blob = new Blob([csv], { type: "text/csv" });
@@ -168,7 +209,14 @@ function App() {
         body: JSON.stringify({
           deviceId: "ESP32-FD-001",
           type,
+          acceleration: Number((1.2 + Math.random() * 2.8).toFixed(2)),
           battery: Math.floor(70 + Math.random() * 25),
+          batteryVoltage: Number((3.7 + Math.random() * 0.45).toFixed(2)),
+          charging: Math.random() > 0.5,
+          powerStatus: Math.random() > 0.5 ? "USB power" : "Battery power",
+          networkType: Math.random() > 0.5 ? "GSM" : "Wi-Fi / Internet",
+          wifiStatus: Math.random() > 0.5 ? "connected" : "disconnected",
+          gsmStatus: Math.random() > 0.5 ? "good" : "weak",
           gsm: Math.floor(55 + Math.random() * 40),
         }),
       });
@@ -201,12 +249,7 @@ function App() {
             <div className="authBrand">FallSafe Secure Access</div>
             <h1>{mode === "login" ? "Sign In" : "Create Account"}</h1>
 
-            <div className="socialStack">
-              <button type="button">Continue with Google</button>
-              <button type="button">Continue with Apple</button>
-            </div>
-
-            <div className="divider">or</div>
+            <div className="divider">secure account access</div>
 
             <div className="authForm">
               <input
@@ -287,6 +330,13 @@ function App() {
 
           <div className="toolbar">
             <span className="userBadge">{email}</span>
+            <button
+              className="refresh"
+              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+              title="Toggle dark mode"
+            >
+              {theme === "dark" ? "☀" : "🌙"}
+            </button>
             <button className="refresh" onClick={loadDashboard} title="Refresh">
               ↻
             </button>
@@ -306,7 +356,7 @@ function App() {
                 <h2>Live fall monitoring and incident tracking</h2>
                 <p>
                   FallSafe receives data from the ESP32 device through the REST API,
-                  stores records in the database, and displays live status here.
+                  stores records in the database, and displays live device details.
                 </p>
 
                 <div className="heroActions">
@@ -322,17 +372,29 @@ function App() {
 
               <div className="deviceCard hoverLift">
                 <span className="pill good">Active Device</span>
-                <h3>{status?.deviceId || "ESP32-FD-001"}</h3>
-                <p>{status?.status || status?.state || "Waiting for data"}</p>
+                <h3>{live?.deviceId || "ESP32-FD-001"}</h3>
+                <p>{live?.status || live?.state || "Waiting for data"}</p>
 
                 <div className="miniStats">
                   <span>
                     Battery
-                    <b>{status?.battery ?? stats.avgBattery}%</b>
+                    <b>{batteryValue}%</b>
+                    <small>{batteryState}</small>
+                  </span>
+                  <span>
+                    Voltage
+                    <b>{batteryVoltage}</b>
+                    <small>{powerStatus}</small>
+                  </span>
+                  <span>
+                    Network
+                    <b>{networkType}</b>
+                    <small>WiFi: {wifiStatus}</small>
                   </span>
                   <span>
                     GSM
-                    <b>{status?.gsm ?? stats.avgGsm}%</b>
+                    <b>{live?.gsm ?? stats.avgGsm}%</b>
+                    <small>{gsmStatus}</small>
                   </span>
                 </div>
               </div>
@@ -342,7 +404,7 @@ function App() {
 
             <section className="contentGrid">
               <IncidentLogs events={events} />
-              <PriorityPanel stats={stats} status={status} />
+              <PriorityPanel stats={stats} status={live} acceleration={acceleration} />
             </section>
           </>
         )}
@@ -356,24 +418,18 @@ function App() {
               </div>
 
               <div className="miniStats deviceStats">
-                <span>
-                  Health Score <b>{stats.healthScore}%</b>
-                </span>
-                <span>
-                  Average Battery <b>{stats.avgBattery}%</b>
-                </span>
-                <span>
-                  Average GSM <b>{stats.avgGsm}%</b>
-                </span>
-                <span>
-                  Connection <b>{status ? "Online" : "Waiting"}</b>
-                </span>
-                <span>
-                  Latest Incident <b>{stats.latestType}</b>
-                </span>
-                <span>
-                  Last Update <b>{stats.lastUpdate}</b>
-                </span>
+                <span>Health Score <b>{stats.healthScore}%</b></span>
+                <span>Average Battery <b>{stats.avgBattery}%</b></span>
+                <span>Battery State <b>{batteryState}</b></span>
+                <span>Voltage <b>{batteryVoltage}</b></span>
+                <span>Power Source <b>{powerStatus}</b></span>
+                <span>Network Type <b>{networkType}</b></span>
+                <span>WiFi Status <b>{wifiStatus}</b></span>
+                <span>GSM Status <b>{gsmStatus}</b></span>
+                <span>Signal <b>{live?.gsm ?? stats.avgGsm}%</b></span>
+                <span>Acceleration <b>{acceleration}</b></span>
+                <span>Latest Incident <b>{stats.latestType}</b></span>
+                <span>Last Update <b>{stats.lastUpdate}</b></span>
               </div>
             </section>
 
@@ -424,18 +480,13 @@ function App() {
           <section className="panel">
             <h3>System Settings</h3>
             <p className="soft">These controls are visual thesis/demo panels.</p>
-            <div className="deviceRow">
-              API Endpoint <span>{API}</span>
-            </div>
-            <div className="deviceRow">
-              Refresh Interval <span>5 seconds</span>
-            </div>
-            <div className="deviceRow">
-              Authentication <span>JWT enabled</span>
-            </div>
-            <div className="deviceRow">
-              Database Storage <span>Enabled</span>
-            </div>
+            <div className="deviceRow">API Endpoint <span>{API}</span></div>
+            <div className="deviceRow">Refresh Interval <span>5 seconds</span></div>
+            <div className="deviceRow">Authentication <span>JWT enabled</span></div>
+            <div className="deviceRow">Database Storage <span>Enabled</span></div>
+            <div className="deviceRow">Theme Mode <span>{theme === "dark" ? "Dark mode" : "Light mode"}</span></div>
+            <div className="deviceRow">Network Detection <span>{networkType}</span></div>
+            <div className="deviceRow">Battery State <span>{batteryState}</span></div>
           </section>
         )}
       </main>
@@ -447,38 +498,19 @@ function MetricGrid({ stats }) {
   return (
     <section className="metricGrid">
       <div className="metric hoverLift">
-        <div>
-          <span>Total Records</span>
-          <strong>{stats.total}</strong>
-          <p>Stored incidents</p>
-        </div>
+        <div><span>Total Records</span><strong>{stats.total}</strong><p>Stored incidents</p></div>
         <i>📁</i>
       </div>
-
       <div className="metric danger hoverLift">
-        <div>
-          <span>Falls</span>
-          <strong>{stats.falls}</strong>
-          <p>Detected fall events</p>
-        </div>
+        <div><span>Falls</span><strong>{stats.falls}</strong><p>Detected fall events</p></div>
         <i>⚠</i>
       </div>
-
       <div className="metric warn hoverLift">
-        <div>
-          <span>SOS</span>
-          <strong>{stats.sos}</strong>
-          <p>Emergency alerts</p>
-        </div>
+        <div><span>SOS</span><strong>{stats.sos}</strong><p>Emergency alerts</p></div>
         <i>🚨</i>
       </div>
-
       <div className="metric good hoverLift">
-        <div>
-          <span>Health</span>
-          <strong>{stats.healthScore}%</strong>
-          <p>Device health score</p>
-        </div>
+        <div><span>Health</span><strong>{stats.healthScore}%</strong><p>Device health score</p></div>
         <i>✓</i>
       </div>
     </section>
@@ -504,15 +536,13 @@ function IncidentLogs({ events }) {
             <div className="logIcon">
               {event.type === "fall" ? "⚠" : event.type === "sos" ? "🚨" : "✓"}
             </div>
-
             <div>
               <strong>{event.type || "event"}</strong>
               <p>
-                Device: {event.deviceId || "ESP32-FD-001"} · Battery:{" "}
-                {event.battery ?? "N/A"}% · GSM: {event.gsm ?? "N/A"}%
+                Device: {event.deviceId || "ESP32-FD-001"} · Battery: {event.battery ?? "N/A"}% ·
+                Network: {event.networkType || event.network || "N/A"} · GSM: {event.gsm ?? "N/A"}%
               </p>
             </div>
-
             <time>{event.createdAt || event.timestamp || event.time || "No time"}</time>
           </div>
         ))
@@ -521,7 +551,7 @@ function IncidentLogs({ events }) {
   );
 }
 
-function PriorityPanel({ stats, status }) {
+function PriorityPanel({ stats, status, acceleration }) {
   return (
     <div className="panel">
       <h3>Priority Alert</h3>
@@ -531,9 +561,8 @@ function PriorityPanel({ stats, status }) {
       </div>
 
       <h3 style={{ marginTop: 22 }}>Device Info</h3>
-      <div className="deviceRow">
-        ESP32-FD-001 <span>{status?.status || "Online"}</span>
-      </div>
+      <div className="deviceRow">ESP32-FD-001 <span>{status?.status || "Online"}</span></div>
+      <div className="deviceRow">Acceleration <span>{acceleration}</span></div>
     </div>
   );
 }
@@ -541,15 +570,9 @@ function PriorityPanel({ stats, status }) {
 function Bar({ label, value, danger, warn }) {
   return (
     <div className="barRow">
-      <div>
-        <b>{label}</b>
-        <span>{value}%</span>
-      </div>
+      <div><b>{label}</b><span>{value}%</span></div>
       <div className="barTrack">
-        <div
-          className={`barFill ${danger ? "danger" : warn ? "warn" : ""}`}
-          style={{ width: `${value}%` }}
-        />
+        <div className={`barFill ${danger ? "danger" : warn ? "warn" : ""}`} style={{ width: `${value}%` }} />
       </div>
     </div>
   );
