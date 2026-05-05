@@ -346,9 +346,33 @@ function App() {
   const navItems = [
     ["dashboard", "⌂"],
     ["device", "📡"],
+    ["setup", "🛜"],
     ["analytics", "📊"],
     ["settings", "⚙"],
   ];
+
+  function openEspSetup() {
+    window.open("http://192.168.4.1", "_blank", "noopener,noreferrer");
+    showToast("Opening ESP32 setup page");
+  }
+
+  async function copySetupText() {
+    const text =
+      "ESP32 WiFi Setup\n" +
+      "1. Open phone WiFi settings\n" +
+      "2. Connect to ESP32-Fall-Setup\n" +
+      "3. Password: 12345678\n" +
+      "4. Open http://192.168.4.1\n" +
+      "5. Choose your WiFi network and save\n" +
+      "6. ESP32 connects to internet and starts sending data";
+
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast("Setup instructions copied");
+    } catch {
+      showToast("Copy failed");
+    }
+  }
 
   return (
     <div className="shell">
@@ -525,6 +549,82 @@ function App() {
                   Send Fall Test
                 </button>
               </div>
+            </section>
+          </>
+        )}
+
+        {activeTab === "setup" && (
+          <>
+            <section className="panel setupHero">
+              <div>
+                <p className="eyebrow">Device provisioning</p>
+                <h3>Setup Device WiFi</h3>
+                <p className="soft">
+                  The dashboard guides the user to connect to the ESP32 setup hotspot.
+                  The actual WiFi credentials are entered into the ESP32 local setup portal.
+                </p>
+
+                <div className="heroActions">
+                  <button onClick={openEspSetup}>Open ESP32 Setup Page</button>
+                  <button className="warn" onClick={copySetupText}>Copy Instructions</button>
+                </div>
+              </div>
+            </section>
+
+            <section className="setupFlow">
+              <div className="setupStep hoverLift">
+                <b>1</b>
+                <h4>Open WiFi settings</h4>
+                <p>Use your phone or laptop and open available WiFi networks.</p>
+              </div>
+
+              <div className="setupStep hoverLift">
+                <b>2</b>
+                <h4>Connect to ESP32 hotspot</h4>
+                <p>Choose <strong>ESP32-Fall-Setup</strong>.</p>
+              </div>
+
+              <div className="setupStep hoverLift">
+                <b>3</b>
+                <h4>Enter password</h4>
+                <p>Password: <strong>12345678</strong></p>
+              </div>
+
+              <div className="setupStep hoverLift">
+                <b>4</b>
+                <h4>Open setup portal</h4>
+                <p>Open <strong>http://192.168.4.1</strong> in your browser.</p>
+              </div>
+
+              <div className="setupStep hoverLift">
+                <b>5</b>
+                <h4>Save WiFi credentials</h4>
+                <p>Select your router WiFi, enter password, and save.</p>
+              </div>
+
+              <div className="setupStep hoverLift">
+                <b>6</b>
+                <h4>Cloud connection</h4>
+                <p>ESP32 connects to internet and starts sending data to FallSafe.</p>
+              </div>
+            </section>
+
+            <section className="panel">
+              <div className="panelHead">
+                <h3>Setup Explanation for Thesis</h3>
+                <span>Recommended defense explanation</span>
+              </div>
+
+              <blockquote className="thesisQuote">
+                “The web dashboard guides the user to connect to the ESP32 provisioning hotspot.
+                The actual WiFi credentials are entered into the ESP32 local configuration portal,
+                after which the device stores the credentials and begins cloud communication.”
+              </blockquote>
+
+              <div className="deviceRow">Hotspot SSID <span>ESP32-Fall-Setup</span></div>
+              <div className="deviceRow">Default Password <span>12345678</span></div>
+              <div className="deviceRow">Local Setup Portal <span>http://192.168.4.1</span></div>
+              <div className="deviceRow">Cloud API <span>{API}</span></div>
             </section>
           </>
         )}
