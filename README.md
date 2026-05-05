@@ -1,65 +1,72 @@
-# FallSafe Web Project
+# FallSafe Enhanced Version
 
-Professional frontend + backend for ESP32 fall/SOS monitoring.
+## What was added
 
-## Run backend
+- Login/register screen before accessing the dashboard
+- JWT authentication for protected web API routes
+- PostgreSQL database support using `DATABASE_URL`
+- Automatic database table creation for users and events
+- Default admin account from environment variables
+- Events stored in database instead of frontend/local-only data
 
-```bash
-cd backend
-npm install
-npm start
+## Default local login
+
+Email: `admin@fallsafe.local`
+Password: `admin12345`
+
+Change these using `ADMIN_EMAIL` and `ADMIN_PASSWORD` on Render.
+
+## Backend deployment variables on Render
+
+Set these environment variables:
+
+```env
+DATABASE_URL=your_render_postgres_url
+JWT_SECRET=your_long_random_secret
+ADMIN_EMAIL=your_email@example.com
+ADMIN_PASSWORD=your_secure_password
+DEVICE_API_KEY=optional_secret_for_esp32
 ```
 
-Backend URL:
+If `DEVICE_API_KEY` is set, ESP32 should include this header:
 
-```text
-http://localhost:5000
+```http
+x-device-key: your_secret_key
 ```
 
-## Run frontend
+## API auth
 
-Open another terminal:
+Frontend login:
 
-```bash
-cd frontend
-npm install
-npm run dev
+```http
+POST /api/auth/login
 ```
 
-Open the shown Vite URL, usually:
+Protected dashboard data:
 
-```text
-http://localhost:5173
+```http
+GET /api/events
+GET /api/status
+GET /api/summary
+GET /api/analytics
+GET /api/devices
 ```
 
-## ESP32 endpoint
+ESP32 event upload:
 
-Send real ESP32 data to:
-
-```text
-POST http://YOUR_PC_IP:5000/api/events
+```http
+POST /api/events
+Content-Type: application/json
 ```
 
-JSON example:
+Example body:
 
 ```json
 {
   "deviceId": "ESP32-FD-001",
-  "type": "sos",
-  "battery": 82,
-  "gsm": 76
+  "type": "fall",
+  "battery": 88,
+  "gsm": 70,
+  "location": "Room 204"
 }
 ```
-
-Allowed type values:
-
-```text
-normal
-sos
-fall
-```
-
-## Notes
-
-No fake records are included. The dashboard is empty until ESP32 or your test request sends data.
-Data is saved in `backend/data/events.json`.
