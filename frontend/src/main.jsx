@@ -123,7 +123,7 @@ function App() {
   }
 
   async function authenticate(mode, payload) {
-    const response = await fetch(`${API}/api/auth/${mode}`, {
+    const response = await fetch(`${import.meta.env.VITE_API_URL}/api/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
