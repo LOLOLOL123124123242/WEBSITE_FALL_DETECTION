@@ -747,3 +747,230 @@ select, input {
   .log { grid-template-columns: 44px 1fr; }
   .log time { grid-column: 2; }
 }
+
+
+/* === Extra thesis polish: smoother colors, transitions, filters, quick cards === */
+body,
+.hero > div,
+.panel,
+.metric,
+.sidebar,
+.deviceCard,
+.apiBanner,
+.refresh,
+.userBadge,
+.nav,
+.log,
+.quickCard {
+  transition:
+    background .35s ease,
+    color .35s ease,
+    border-color .35s ease,
+    box-shadow .35s ease,
+    transform .25s ease;
+}
+
+body {
+  background-size: 180% 180%;
+  animation: backgroundFlow 16s ease infinite;
+}
+
+@keyframes backgroundFlow {
+  0% { background-position: 0% 20%; }
+  50% { background-position: 100% 80%; }
+  100% { background-position: 0% 20%; }
+}
+
+.hero > div:first-child {
+  position: relative;
+  overflow: hidden;
+}
+
+.hero > div:first-child::before {
+  content: "";
+  position: absolute;
+  inset: -80px;
+  background:
+    radial-gradient(circle at 20% 20%, rgba(158,245,188,.20), transparent 32%),
+    radial-gradient(circle at 80% 50%, rgba(144,219,244,.13), transparent 34%),
+    radial-gradient(circle at 40% 90%, rgba(255,209,102,.10), transparent 35%);
+  filter: blur(10px);
+  animation: glowMove 10s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+
+.hero > div:first-child > * {
+  position: relative;
+  z-index: 1;
+}
+
+@keyframes glowMove {
+  from { transform: translate3d(-18px, -12px, 0) scale(1); }
+  to { transform: translate3d(18px, 12px, 0) scale(1.04); }
+}
+
+.quickGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+  margin-bottom: 22px;
+}
+
+.quickCard {
+  border: 1px solid var(--line);
+  border-radius: 28px;
+  padding: 24px;
+  min-height: 155px;
+  box-shadow: 0 22px 70px rgba(0,0,0,.18);
+  overflow: hidden;
+  position: relative;
+}
+
+.quickCard::after {
+  content: "";
+  position: absolute;
+  width: 160px;
+  height: 160px;
+  right: -55px;
+  top: -55px;
+  border-radius: 50%;
+  background: rgba(255,255,255,.13);
+}
+
+.quickCard span {
+  color: rgba(255,255,255,.75);
+  font-weight: 800;
+  font-size: 14px;
+}
+
+.quickCard strong {
+  display: block;
+  margin-top: 18px;
+  font-size: 28px;
+}
+
+.quickCard p {
+  margin: 8px 0 0;
+  color: rgba(255,255,255,.78);
+}
+
+.gradientOne {
+  background: linear-gradient(135deg, rgba(38, 214, 132, .35), rgba(10, 27, 17, .65));
+}
+
+.gradientTwo {
+  background: linear-gradient(135deg, rgba(61, 169, 252, .33), rgba(10, 27, 17, .65));
+}
+
+.gradientThree {
+  background: linear-gradient(135deg, rgba(255, 209, 102, .35), rgba(10, 27, 17, .65));
+}
+
+.filtersBar {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) 150px 150px;
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.filtersBar input,
+.filtersBar select {
+  width: 100%;
+}
+
+.heroActions button,
+.authForm button,
+.refresh,
+.nav,
+.switchAuth {
+  transition: transform .18s ease, box-shadow .18s ease, filter .18s ease;
+}
+
+.heroActions button:hover,
+.authForm button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 16px 35px rgba(158,245,188,.18);
+  filter: brightness(1.04);
+}
+
+.heroActions button:active,
+.authForm button:active,
+.refresh:active,
+.nav:active {
+  transform: scale(.97);
+}
+
+.metric strong,
+.miniStats b,
+.quickCard strong {
+  animation: numberPop .45s ease both;
+}
+
+@keyframes numberPop {
+  from { opacity: 0; transform: translateY(8px) scale(.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+body[data-theme="light"] .quickCard span,
+body[data-theme="light"] .quickCard p {
+  color: rgba(7,17,13,.72);
+}
+
+body[data-theme="light"] .gradientOne {
+  background: linear-gradient(135deg, #c7f9d8, #ffffff);
+}
+
+body[data-theme="light"] .gradientTwo {
+  background: linear-gradient(135deg, #d7f0ff, #ffffff);
+}
+
+body[data-theme="light"] .gradientThree {
+  background: linear-gradient(135deg, #fff0bc, #ffffff);
+}
+
+body[data-theme="light"] .quickCard {
+  color: #07110d;
+}
+
+@media (max-width: 1080px) {
+  .quickGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .filtersBar {
+    grid-template-columns: 1fr;
+  }
+
+  .quickGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .quickCard {
+    min-height: 130px;
+  }
+}
+
+
+/* Extra status colours for offline / no battery thesis states */
+.gradientDanger {
+  background: linear-gradient(135deg, rgba(255, 107, 107, .38), rgba(35, 8, 12, .72));
+}
+
+body[data-theme="light"] .gradientDanger {
+  background: linear-gradient(135deg, #ffd1d1, #ffffff);
+}
+
+.quickCard.gradientDanger strong {
+  color: #ffd7d7;
+}
+
+body[data-theme="light"] .quickCard.gradientDanger strong {
+  color: #9e1b1b;
+}
+
+.deviceRow span,
+.log p {
+  word-break: break-word;
+}

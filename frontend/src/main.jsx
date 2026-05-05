@@ -18,6 +18,9 @@ function App() {
   const [analytics, setAnalytics] = useState(null);
   const [loading, setLoading] = useState(false);
   const [theme, setTheme] = useState(localStorage.getItem("theme") || "dark");
+  const [eventFilter, setEventFilter] = useState("all");
+  const [searchText, setSearchText] = useState("");
+  const [sortOrder, setSortOrder] = useState("newest");
 
   function showToast(text) {
     setToast(text);
@@ -132,6 +135,29 @@ function App() {
     };
   }, [events, analytics, live]);
 
+  const filteredEvents = useMemo(() => {
+    let list = [...events];
+
+    if (eventFilter !== "all") {
+      list = list.filter((event) => String(event.type).toLowerCase() === eventFilter);
+    }
+
+    if (searchText.trim()) {
+      const query = searchText.toLowerCase();
+      list = list.filter((event) =>
+        JSON.stringify(event).toLowerCase().includes(query)
+      );
+    }
+
+    list.sort((a, b) => {
+      const aTime = new Date(a.createdAt || a.timestamp || a.time || 0).getTime();
+      const bTime = new Date(b.createdAt || b.timestamp || b.time || 0).getTime();
+      return sortOrder === "newest" ? bTime - aTime : aTime - bTime;
+    });
+
+    return list;
+  }, [events, eventFilter, searchText, sortOrder]);
+
   const batteryValue = live?.battery ?? stats.avgBattery;
   const batteryVoltage = live?.batteryVoltage ?? live?.voltage ?? "N/A";
   const powerStatus = live?.powerStatus || live?.power || "Unknown";
@@ -156,6 +182,27 @@ function App() {
   const wifiStatus = live?.wifiStatus || "unknown";
   const gsmStatus = live?.gsmStatus || "unknown";
   const acceleration = live?.acceleration ?? "N/A";
+  const gyro = live?.gyro ?? live?.gyroscope ?? "N/A";
+
+  const normalizedPower = String(powerStatus).toLowerCase();
+  const powerLabel =
+    normalizedPower === "no_battery"
+      ? "No battery detected"
+      : normalizedPower === "charging"
+      ? "Charging"
+      : normalizedPower === "battery"
+      ? "Battery power"
+      : powerStatus;
+
+  const normalizedNetwork = String(networkType).toLowerCase();
+  const networkLabel =
+    normalizedNetwork === "offline"
+      ? "Offline"
+      : normalizedNetwork === "gsm"
+      ? "GSM"
+      : normalizedNetwork.includes("wi")
+      ? "Wi-Fi / Internet"
+      : networkType;
 
   function logout() {
     localStorage.removeItem("token");
@@ -165,7 +212,7 @@ function App() {
 
   function exportCSV() {
     const rows = [
-      ["Time", "Device", "Type", "Acceleration", "Battery", "Voltage", "Charging", "Power", "Network", "WiFi", "GSM", "Signal"],
+      ["Time", "Device", "Type", "Acceleration", "Battery", "Voltage", "Charging", "Power", "Network", "WiFi", "GSM", "Signal", "Gyro"],
       ...events.map((e) => [
         e.createdAt || e.timestamp || e.time || "",
         e.deviceId || "ESP32-FD-001",
@@ -179,6 +226,7 @@ function App() {
         e.wifiStatus || "",
         e.gsmStatus || "",
         e.gsm ?? "",
+        e.gyro ?? e.gyroscope ?? "",
       ]),
     ];
 
@@ -209,15 +257,16 @@ function App() {
         body: JSON.stringify({
           deviceId: "ESP32-FD-001",
           type,
-          acceleration: Number((1.2 + Math.random() * 2.8).toFixed(2)),
-          battery: Math.floor(70 + Math.random() * 25),
-          batteryVoltage: Number((3.7 + Math.random() * 0.45).toFixed(2)),
+          acceleration: Number((9.7 + Math.random() * 0.4).toFixed(2)),
+          gyro: Number((Math.random() * 0.1).toFixed(2)),
+          battery: Math.floor(Math.random() * 100),
+          batteryVoltage: Number((3.0 + Math.random() * 1.2).toFixed(2)),
           charging: Math.random() > 0.5,
-          powerStatus: Math.random() > 0.5 ? "USB power" : "Battery power",
-          networkType: Math.random() > 0.5 ? "GSM" : "Wi-Fi / Internet",
+          powerStatus: Math.random() > 0.15 ? "charging" : "no_battery",
+          networkType: Math.random() > 0.5 ? "GSM" : "offline",
           wifiStatus: Math.random() > 0.5 ? "connected" : "disconnected",
           gsmStatus: Math.random() > 0.5 ? "good" : "weak",
-          gsm: Math.floor(55 + Math.random() * 40),
+          gsm: Math.floor(10 + Math.random() * 90),
         }),
       });
 
@@ -384,11 +433,11 @@ function App() {
                   <span>
                     Voltage
                     <b>{batteryVoltage}</b>
-                    <small>{powerStatus}</small>
+                    <small>{powerLabel}</small>
                   </span>
                   <span>
                     Network
-                    <b>{networkType}</b>
+                    <b>{networkLabel}</b>
                     <small>WiFi: {wifiStatus}</small>
                   </span>
                   <span>
@@ -402,9 +451,36 @@ function App() {
 
             <MetricGrid stats={stats} />
 
+            <section className="quickGrid">
+              <div className={`quickCard ${powerLabel === "No battery detected" ? "gradientDanger" : "gradientOne"} hoverLift`}>
+                <span>Battery Intelligence</span>
+                <strong>{batteryState}</strong>
+                <p>{batteryVoltage}V · {powerLabel}</p>
+              </div>
+              <div className={`quickCard ${networkLabel === "Offline" ? "gradientDanger" : "gradientTwo"} hoverLift`}>
+                <span>Connectivity</span>
+                <strong>{networkLabel}</strong>
+                <p>WiFi: {wifiStatus} · GSM: {gsmStatus}</p>
+              </div>
+              <div className="quickCard gradientThree hoverLift">
+                <span>Motion Sensor</span>
+                <strong>{acceleration}</strong>
+                <p>Acceleration value from ESP32 payload</p>
+              </div>
+            </section>
+
             <section className="contentGrid">
-              <IncidentLogs events={events} />
-              <PriorityPanel stats={stats} status={live} acceleration={acceleration} />
+              <IncidentLogs
+                events={filteredEvents}
+                totalEvents={events.length}
+                eventFilter={eventFilter}
+                setEventFilter={setEventFilter}
+                searchText={searchText}
+                setSearchText={setSearchText}
+                sortOrder={sortOrder}
+                setSortOrder={setSortOrder}
+              />
+              <PriorityPanel stats={stats} status={live} acceleration={acceleration} gyro={gyro} powerLabel={powerLabel} networkLabel={networkLabel} />
             </section>
           </>
         )}
@@ -422,12 +498,13 @@ function App() {
                 <span>Average Battery <b>{stats.avgBattery}%</b></span>
                 <span>Battery State <b>{batteryState}</b></span>
                 <span>Voltage <b>{batteryVoltage}</b></span>
-                <span>Power Source <b>{powerStatus}</b></span>
-                <span>Network Type <b>{networkType}</b></span>
+                <span>Power Source <b>{powerLabel}</b></span>
+                <span>Network Type <b>{networkLabel}</b></span>
                 <span>WiFi Status <b>{wifiStatus}</b></span>
                 <span>GSM Status <b>{gsmStatus}</b></span>
                 <span>Signal <b>{live?.gsm ?? stats.avgGsm}%</b></span>
                 <span>Acceleration <b>{acceleration}</b></span>
+                <span>Gyroscope <b>{gyro}</b></span>
                 <span>Latest Incident <b>{stats.latestType}</b></span>
                 <span>Last Update <b>{stats.lastUpdate}</b></span>
               </div>
@@ -485,8 +562,10 @@ function App() {
             <div className="deviceRow">Authentication <span>JWT enabled</span></div>
             <div className="deviceRow">Database Storage <span>Enabled</span></div>
             <div className="deviceRow">Theme Mode <span>{theme === "dark" ? "Dark mode" : "Light mode"}</span></div>
-            <div className="deviceRow">Network Detection <span>{networkType}</span></div>
+            <div className="deviceRow">Network Detection <span>{networkLabel}</span></div>
             <div className="deviceRow">Battery State <span>{batteryState}</span></div>
+            <div className="deviceRow">Power Source <span>{powerLabel}</span></div>
+            <div className="deviceRow">Gyroscope <span>{gyro}</span></div>
           </section>
         )}
       </main>
@@ -517,18 +596,47 @@ function MetricGrid({ stats }) {
   );
 }
 
-function IncidentLogs({ events }) {
+function IncidentLogs({
+  events,
+  totalEvents,
+  eventFilter,
+  setEventFilter,
+  searchText,
+  setSearchText,
+  sortOrder,
+  setSortOrder,
+}) {
   return (
     <div className="panel">
       <div className="panelHead">
         <h3>Incident Logs</h3>
-        <span>{events.length} records</span>
+        <span>{events.length} shown / {totalEvents} total</span>
+      </div>
+
+      <div className="filtersBar">
+        <input
+          placeholder="Search logs..."
+          value={searchText}
+          onChange={(e) => setSearchText(e.target.value)}
+        />
+
+        <select value={eventFilter} onChange={(e) => setEventFilter(e.target.value)}>
+          <option value="all">All events</option>
+          <option value="normal">Normal</option>
+          <option value="fall">Falls</option>
+          <option value="sos">SOS</option>
+        </select>
+
+        <select value={sortOrder} onChange={(e) => setSortOrder(e.target.value)}>
+          <option value="newest">Newest first</option>
+          <option value="oldest">Oldest first</option>
+        </select>
       </div>
 
       {events.length === 0 ? (
         <div className="empty">
-          <strong>No records yet</strong>
-          <span>When ESP32 sends data, it will appear here.</span>
+          <strong>No matching records</strong>
+          <span>Try another filter or wait for ESP32 data.</span>
         </div>
       ) : (
         events.map((event, index) => (
@@ -540,7 +648,8 @@ function IncidentLogs({ events }) {
               <strong>{event.type || "event"}</strong>
               <p>
                 Device: {event.deviceId || "ESP32-FD-001"} · Battery: {event.battery ?? "N/A"}% ·
-                Network: {event.networkType || event.network || "N/A"} · GSM: {event.gsm ?? "N/A"}%
+                Network: {event.networkType || event.network || "N/A"} · GSM: {event.gsm ?? "N/A"}% ·
+                Gyro: {event.gyro ?? event.gyroscope ?? "N/A"}
               </p>
             </div>
             <time>{event.createdAt || event.timestamp || event.time || "No time"}</time>
@@ -551,7 +660,7 @@ function IncidentLogs({ events }) {
   );
 }
 
-function PriorityPanel({ stats, status, acceleration }) {
+function PriorityPanel({ stats, status, acceleration, gyro, powerLabel, networkLabel }) {
   return (
     <div className="panel">
       <h3>Priority Alert</h3>
@@ -563,6 +672,9 @@ function PriorityPanel({ stats, status, acceleration }) {
       <h3 style={{ marginTop: 22 }}>Device Info</h3>
       <div className="deviceRow">ESP32-FD-001 <span>{status?.status || "Online"}</span></div>
       <div className="deviceRow">Acceleration <span>{acceleration}</span></div>
+      <div className="deviceRow">Gyroscope <span>{gyro}</span></div>
+      <div className="deviceRow">Power <span>{powerLabel}</span></div>
+      <div className="deviceRow">Network <span>{networkLabel}</span></div>
     </div>
   );
 }
