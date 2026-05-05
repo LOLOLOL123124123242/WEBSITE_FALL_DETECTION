@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import ReactDOM from "react-dom/client";
 import "./style.css";
 
@@ -9,8 +9,10 @@ function App() {
   const [email, setEmail] = useState("admin@fallsafe.local");
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
+  const [token, setToken] = useState(localStorage.getItem("token"));
+  const [events, setEvents] = useState([]);
 
-  async function submit() {
+  async function authSubmit() {
     const endpoint = mode === "login" ? "/api/auth/login" : "/api/auth/register";
 
     try {
@@ -34,47 +36,97 @@ function App() {
       }
 
       localStorage.setItem("token", data.token);
-      setMessage("✅ Login successful");
-      window.location.reload();
-    } catch (err) {
-      setMessage("❌ Server connection error");
+      setToken(data.token);
+    } catch {
+      setMessage("❌ Server error");
     }
+  }
+
+  async function loadEvents() {
+    try {
+      const res = await fetch(`${API}/api/events`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) setEvents(await res.json());
+    } catch {}
+  }
+
+  useEffect(() => {
+    if (token) loadEvents();
+  }, [token]);
+
+  function logout() {
+    localStorage.removeItem("token");
+    setToken(null);
+  }
+
+  if (!token) {
+    return (
+      <div className="authShell">
+        <div className="authModal">
+          <div className="authInfo">
+            <h2>Welcome Back to FallSafe</h2>
+            <p>
+              Sign in to monitor ESP32 fall detection, view logs, and analytics.
+            </p>
+          </div>
+
+          <div className="authCard">
+            <div className="authBrand">FallSafe</div>
+
+            <h1>{mode === "login" ? "Sign In" : "Register"}</h1>
+
+            <div className="authForm">
+              <input
+                type="email"
+                placeholder="Email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+
+              <input
+                type="password"
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+
+              <button onClick={authSubmit}>
+                {mode === "login" ? "Sign In" : "Create Account"}
+              </button>
+            </div>
+
+            <button
+              className="switchAuth"
+              onClick={() => setMode(mode === "login" ? "register" : "login")}
+            >
+              {mode === "login"
+                ? "Need an account? Register"
+                : "Already have an account? Log in"}
+            </button>
+
+            {message && <div className="authError">{message}</div>}
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
     <div className="container">
-      <h1>FallSafe {mode === "login" ? "Login" : "Register"}</h1>
+      <h1>FallSafe Dashboard</h1>
+      <button onClick={logout}>Logout</button>
 
-      <input
-        type="email"
-        placeholder="Email"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-      />
-
-      <input
-        type="password"
-        placeholder="Password"
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-      />
-
-      <button onClick={submit}>
-        {mode === "login" ? "Log in" : "Create account"}
-      </button>
-
-      <button
-        onClick={() => {
-          setMessage("");
-          setMode(mode === "login" ? "register" : "login");
-        }}
-      >
-        {mode === "login"
-          ? "Need an account? Register"
-          : "Already have an account? Log in"}
-      </button>
-
-      <p>{message}</p>
+      <h2>Events</h2>
+      {events.length === 0 ? (
+        <p>No data</p>
+      ) : (
+        events.map((e, i) => (
+          <div key={i}>
+            {e.type} - {e.deviceId}
+          </div>
+        ))
+      )}
     </div>
   );
 }
