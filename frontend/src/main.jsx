@@ -17,6 +17,9 @@ function App() {
   const [status, setStatus] = useState(null);
   const [analytics, setAnalytics] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [timeRange, setTimeRange] = useState("24h");
+  const [compactMode, setCompactMode] = useState(localStorage.getItem("compactMode") === "true");
+  const [showCommand, setShowCommand] = useState(false);
   const [theme, setTheme] = useState(localStorage.getItem("theme") || "dark");
   const [eventFilter, setEventFilter] = useState("all");
   const [searchText, setSearchText] = useState("");
@@ -31,6 +34,27 @@ function App() {
     document.body.dataset.theme = theme;
     localStorage.setItem("theme", theme);
   }, [theme]);
+
+  useEffect(() => {
+    document.body.dataset.compact = compactMode ? "true" : "false";
+    localStorage.setItem("compactMode", String(compactMode));
+  }, [compactMode]);
+
+  useEffect(() => {
+    function onKeyDown(event) {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setShowCommand((open) => !open);
+      }
+
+      if (event.key === "Escape") {
+        setShowCommand(false);
+      }
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   async function authSubmit() {
     const endpoint = mode === "login" ? "/api/auth/login" : "/api/auth/register";
@@ -157,6 +181,32 @@ function App() {
 
     return list;
   }, [events, eventFilter, searchText, sortOrder]);
+
+  const riskScore = Math.min(
+    100,
+    Math.round(
+      stats.fallRate * 0.5 +
+        stats.sosRate * 0.35 +
+        (stats.avgBattery < 20 ? 25 : 0) +
+        (stats.avgGsm < 35 ? 20 : 0)
+    )
+  );
+
+  const riskLabel =
+    riskScore >= 70 ? "Critical" : riskScore >= 40 ? "Warning" : "Stable";
+
+  const insight =
+    riskScore >= 70
+      ? "High risk detected. Check the person and verify device signal immediately."
+      : riskScore >= 40
+      ? "Moderate risk. Review recent SOS/fall events and battery level."
+      : "System is stable. No immediate action is required.";
+
+  const timeline = events.slice(0, 6).map((event) => ({
+    title: event.type || "event",
+    time: event.createdAt || event.timestamp || event.time || "No time",
+    detail: `Battery ${event.battery ?? "N/A"}% · GSM ${event.gsm ?? "N/A"}%`,
+  }));
 
   const batteryValue = live?.battery ?? stats.avgBattery;
   const batteryVoltage = live?.batteryVoltage ?? live?.voltage ?? "N/A";
@@ -286,17 +336,26 @@ function App() {
       <div className="authShell">
         <div className="authModal">
           <div className="authInfo">
-            <h2>Welcome Back to FallSafe</h2>
+            <div className="authLogo">FS</div>
+            <h2>Safety monitoring made simple</h2>
             <div className="authAccent"></div>
             <p>
-              Sign in to continue to your ESP32 fall detection dashboard, live status,
-              incident records, and analytics.
+              FallSafe helps users track incidents, device health, connectivity, and emergency alerts in real time.
             </p>
+
+            <div className="authFeatureList">
+              <span>✓ Live device status</span>
+              <span>✓ Battery and network health</span>
+              <span>✓ Incident history and export</span>
+            </div>
           </div>
 
           <div className="authCard">
-            <div className="authBrand">FallSafe Secure Access</div>
-            <h1>{mode === "login" ? "Sign In" : "Create Account"}</h1>
+            <div className="authBrand">FallSafe Cloud</div>
+            <h1>{mode === "login" ? "Welcome back" : "Create your account"}</h1>
+            <p className="authSubtitle">
+              Monitor safety alerts, device status, battery health, and connectivity from one secure dashboard.
+            </p>
 
             <div className="divider">secure account access</div>
 
@@ -336,7 +395,7 @@ function App() {
             </button>
 
             {message && <div className="authError">{message}</div>}
-            <div className="authMeta">REST API: {API}</div>
+            <div className="authMeta">Secure REST API: {API}</div>
           </div>
         </div>
       </div>
@@ -348,6 +407,7 @@ function App() {
     ["device", "📡"],
     ["setup", "🛜"],
     ["analytics", "📊"],
+    ["features", "✨"],
     ["settings", "⚙"],
   ];
 
@@ -378,6 +438,21 @@ function App() {
     <div className="shell">
       {toast && <div className="toast">{toast}</div>}
 
+      {showCommand && (
+        <div className="commandOverlay" onClick={() => setShowCommand(false)}>
+          <div className="commandBox" onClick={(event) => event.stopPropagation()}>
+            <div className="commandTitle">Command Center</div>
+            <button onClick={() => { setActiveTab("dashboard"); setShowCommand(false); }}>Open Dashboard</button>
+            <button onClick={() => { setActiveTab("device"); setShowCommand(false); }}>Open Device Statistics</button>
+            <button onClick={() => { setActiveTab("setup"); setShowCommand(false); }}>Open WiFi Setup</button>
+            <button onClick={() => { setActiveTab("analytics"); setShowCommand(false); }}>Open Analytics</button>
+            <button onClick={() => { setActiveTab("features"); setShowCommand(false); }}>Open Product Features</button>
+            <button onClick={() => { setTheme(theme === "dark" ? "light" : "dark"); setShowCommand(false); }}>Toggle Theme</button>
+            <button onClick={() => { exportCSV(); setShowCommand(false); }}>Export CSV</button>
+          </div>
+        </div>
+      )}
+
       <aside className="sidebar">
         <div className="brandMark">FS</div>
         <nav>
@@ -403,6 +478,26 @@ function App() {
 
           <div className="toolbar">
             <span className="userBadge">{email}</span>
+            <select value={timeRange} onChange={(event) => setTimeRange(event.target.value)} title="Time range">
+              <option value="1h">1 hour</option>
+              <option value="24h">24 hours</option>
+              <option value="7d">7 days</option>
+              <option value="all">All time</option>
+            </select>
+            <button
+              className="refresh"
+              onClick={() => setShowCommand(true)}
+              title="Command center Ctrl+K"
+            >
+              ⌘
+            </button>
+            <button
+              className="refresh"
+              onClick={() => setCompactMode(!compactMode)}
+              title="Toggle compact mode"
+            >
+              {compactMode ? "▦" : "▤"}
+            </button>
             <button
               className="refresh"
               onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
@@ -537,7 +632,7 @@ function App() {
             <section className="panel">
               <div className="panelHead">
                 <h3>Device Actions</h3>
-                <span>Test thesis demonstration functions</span>
+                <span>Device simulation tools</span>
               </div>
 
               <div className="heroActions">
@@ -611,11 +706,11 @@ function App() {
 
             <section className="panel">
               <div className="panelHead">
-                <h3>Setup Explanation for Thesis</h3>
-                <span>Recommended defense explanation</span>
+                <h3>How Device Setup Works</h3>
+                <span>User setup explanation</span>
               </div>
 
-              <blockquote className="thesisQuote">
+              <blockquote className="productQuote">
                 “The web dashboard guides the user to connect to the ESP32 provisioning hotspot.
                 The actual WiFi credentials are entered into the ESP32 local configuration portal,
                 after which the device stores the credentials and begins cloud communication.”
@@ -653,15 +748,64 @@ function App() {
           </>
         )}
 
+        {activeTab === "features" && (
+          <>
+            <section className="panel featureHero">
+              <p className="eyebrow">Product capabilities</p>
+              <h3>Everything users need for reliable monitoring</h3>
+              <p className="soft">
+                FallSafe combines device telemetry, emergency alerts, battery health, and connectivity status
+                in one clean, easy-to-use dashboard.
+              </p>
+            </section>
+
+            <section className="featureGrid">
+              <div className="featureCard hoverLift">
+                <b>01</b>
+                <h4>Real-time monitoring</h4>
+                <p>Automatically refreshes device data, incident logs, and alert status every few seconds.</p>
+              </div>
+              <div className="featureCard hoverLift">
+                <b>02</b>
+                <h4>Smart risk status</h4>
+                <p>Combines fall rate, SOS activity, battery health, and signal strength into a simple risk score.</p>
+              </div>
+              <div className="featureCard hoverLift">
+                <b>03</b>
+                <h4>Battery intelligence</h4>
+                <p>Shows charging, not charging, full battery, low battery, voltage, and power source states.</p>
+              </div>
+              <div className="featureCard hoverLift">
+                <b>04</b>
+                <h4>Connectivity awareness</h4>
+                <p>Displays whether the device is using GSM, Wi-Fi/Internet, or is currently offline.</p>
+              </div>
+              <div className="featureCard hoverLift">
+                <b>05</b>
+                <h4>Incident history</h4>
+                <p>Search, filter, sort, and export records for review or documentation.</p>
+              </div>
+              <div className="featureCard hoverLift">
+                <b>06</b>
+                <h4>Mobile friendly</h4>
+                <p>Optimized layout for phones, tablets, and desktop screens.</p>
+              </div>
+            </section>
+          </>
+        )}
+
         {activeTab === "settings" && (
           <section className="panel">
             <h3>System Settings</h3>
-            <p className="soft">These controls are visual thesis/demo panels.</p>
+            <p className="soft">Configure dashboard preferences, device setup, and monitoring behavior.</p>
             <div className="deviceRow">API Endpoint <span>{API}</span></div>
             <div className="deviceRow">Refresh Interval <span>5 seconds</span></div>
             <div className="deviceRow">Authentication <span>JWT enabled</span></div>
             <div className="deviceRow">Database Storage <span>Enabled</span></div>
             <div className="deviceRow">Theme Mode <span>{theme === "dark" ? "Dark mode" : "Light mode"}</span></div>
+            <div className="deviceRow">Compact Mode <span>{compactMode ? "Enabled" : "Disabled"}</span></div>
+            <div className="deviceRow">Selected Time Range <span>{timeRange}</span></div>
+            <div className="deviceRow">Command Shortcut <span>Ctrl + K</span></div>
             <div className="deviceRow">Network Detection <span>{networkLabel}</span></div>
             <div className="deviceRow">Battery State <span>{batteryState}</span></div>
             <div className="deviceRow">Power Source <span>{powerLabel}</span></div>
