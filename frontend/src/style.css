@@ -1070,3 +1070,215 @@ body[data-theme="light"] .quickCard.gradientDanger strong {
     min-height: auto;
   }
 }
+
+
+/* Senior polish: command center, risk intelligence, timeline, compact mode */
+body[data-compact="true"] .hero > div:first-child,
+body[data-compact="true"] .deviceCard,
+body[data-compact="true"] .panel,
+body[data-compact="true"] .metric,
+body[data-compact="true"] .quickCard {
+  padding: 18px;
+  border-radius: 22px;
+}
+
+body[data-compact="true"] .hero h2 {
+  font-size: clamp(32px, 5vw, 56px);
+}
+
+body[data-compact="true"] .metric {
+  min-height: 120px;
+}
+
+.commandOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(0, 0, 0, .58);
+  display: grid;
+  place-items: start center;
+  padding-top: 10vh;
+  backdrop-filter: blur(10px);
+}
+
+.commandBox {
+  width: min(560px, calc(100vw - 28px));
+  border: 1px solid var(--line);
+  background:
+    linear-gradient(135deg, rgba(255,255,255,.14), rgba(255,255,255,.06)),
+    rgba(7, 17, 13, .94);
+  border-radius: 28px;
+  padding: 18px;
+  box-shadow: 0 30px 90px rgba(0,0,0,.45);
+  animation: commandIn .2s ease both;
+}
+
+body[data-theme="light"] .commandBox {
+  background: rgba(255,255,255,.96);
+}
+
+@keyframes commandIn {
+  from { opacity: 0; transform: translateY(-14px) scale(.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.commandTitle {
+  color: var(--green);
+  font-weight: 900;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  font-size: 13px;
+  margin: 6px 8px 12px;
+}
+
+.commandBox button {
+  width: 100%;
+  height: 52px;
+  border: 1px solid var(--line);
+  background: rgba(255,255,255,.06);
+  color: var(--text);
+  border-radius: 16px;
+  margin-top: 8px;
+  text-align: left;
+  padding: 0 16px;
+  font-weight: 800;
+  transition: .18s ease;
+}
+
+.commandBox button:hover {
+  background: rgba(158,245,188,.12);
+  transform: translateX(4px);
+}
+
+.seniorGrid {
+  display: grid;
+  grid-template-columns: minmax(260px, .7fr) minmax(0, 1.3fr);
+  gap: 22px;
+  margin-bottom: 22px;
+}
+
+.riskPanel {
+  border: 1px solid var(--line);
+  border-radius: 30px;
+  padding: 28px;
+  min-height: 300px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  backdrop-filter: blur(18px);
+  box-shadow: 0 22px 70px rgba(0,0,0,.18);
+  background:
+    radial-gradient(circle at top right, rgba(158,245,188,.22), transparent 38%),
+    rgba(255,255,255,.075);
+}
+
+.riskPanel.warning {
+  background:
+    radial-gradient(circle at top right, rgba(255,209,102,.28), transparent 38%),
+    rgba(255,209,102,.08);
+}
+
+.riskPanel.critical {
+  background:
+    radial-gradient(circle at top right, rgba(255,107,107,.32), transparent 38%),
+    rgba(255,107,107,.10);
+}
+
+.riskPanel span {
+  color: var(--muted);
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  font-size: 13px;
+}
+
+.riskPanel strong {
+  font-size: 72px;
+  font-weight: 240;
+  letter-spacing: -.07em;
+  margin-top: 18px;
+}
+
+.riskPanel b {
+  font-size: 22px;
+  color: var(--green);
+}
+
+.riskPanel.warning b {
+  color: var(--yellow);
+}
+
+.riskPanel.critical b {
+  color: var(--red);
+}
+
+.riskPanel p {
+  color: var(--muted);
+  line-height: 1.65;
+}
+
+.timeline {
+  display: grid;
+  gap: 14px;
+}
+
+.timelineItem {
+  display: grid;
+  grid-template-columns: 22px 1fr;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(255,255,255,.055);
+}
+
+.timelineItem i {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  margin-top: 4px;
+  background: var(--green);
+  box-shadow: 0 0 0 6px rgba(158,245,188,.12);
+}
+
+.timelineItem strong {
+  text-transform: capitalize;
+}
+
+.timelineItem p {
+  margin: 4px 0;
+  color: var(--muted);
+}
+
+.timelineItem time {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.toolbar select {
+  min-width: 118px;
+}
+
+@media (max-width: 1080px) {
+  .seniorGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .commandOverlay {
+    padding-top: 7vh;
+  }
+
+  .riskPanel {
+    min-height: 220px;
+  }
+
+  .riskPanel strong {
+    font-size: 58px;
+  }
+
+  .toolbar select {
+    width: 100%;
+  }
+}
