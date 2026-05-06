@@ -232,8 +232,11 @@ function App() {
   const wifiStatus = live?.wifiStatus || "unknown";
   const gsmStatus = live?.gsmStatus || "unknown";
   const acceleration = live?.acceleration ?? "N/A";
+  const temperature = live?.temperature ?? "N/A";
+  const firmware = live?.firmware || "v2.2.0";
+  const ipAddress = live?.ipAddress || "N/A";
+  const alarmActive = live?.alarmActive === true || live?.alarmActive === "true";
   const gyro = live?.gyro ?? live?.gyroscope ?? "N/A";
-
   const normalizedPower = String(powerStatus).toLowerCase();
   const powerLabel =
     normalizedPower === "no_battery"
@@ -242,6 +245,8 @@ function App() {
       ? "Charging"
       : normalizedPower === "battery"
       ? "Battery power"
+      : normalizedPower === "usb"
+      ? "USB power"
       : powerStatus;
 
   const normalizedNetwork = String(networkType).toLowerCase();
@@ -250,8 +255,10 @@ function App() {
       ? "Offline"
       : normalizedNetwork === "gsm"
       ? "GSM"
+      : normalizedNetwork === "wifi"
+      ? "Wi-Fi"
       : normalizedNetwork.includes("wi")
-      ? "Wi-Fi / Internet"
+      ? "Wi-Fi"
       : networkType;
 
   function logout() {
@@ -262,12 +269,15 @@ function App() {
 
   function exportCSV() {
     const rows = [
-      ["Time", "Device", "Type", "Acceleration", "Battery", "Voltage", "Charging", "Power", "Network", "WiFi", "GSM", "Signal", "Gyro"],
+      ["Time", "Device", "Type", "Status", "Acceleration", "Gyro", "Temperature", "Battery", "Voltage", "Charging", "Power", "Network", "WiFi", "GSM Status", "GSM Signal", "IP Address", "Firmware", "Alarm Active"],
       ...events.map((e) => [
         e.createdAt || e.timestamp || e.time || "",
         e.deviceId || "ESP32-FD-001",
         e.type || "event",
+        e.status || "",
         e.acceleration ?? "",
+        e.gyro ?? e.gyroscope ?? "",
+        e.temperature ?? "",
         e.battery ?? "",
         e.batteryVoltage ?? e.voltage ?? "",
         e.charging ?? "",
@@ -276,7 +286,9 @@ function App() {
         e.wifiStatus || "",
         e.gsmStatus || "",
         e.gsm ?? "",
-        e.gyro ?? e.gyroscope ?? "",
+        e.ipAddress || "",
+        e.firmware || "",
+        e.alarmActive ?? "",
       ]),
     ];
 
@@ -307,16 +319,21 @@ function App() {
         body: JSON.stringify({
           deviceId: "ESP32-FD-001",
           type,
+          status: type === "normal" ? "online" : "warning",
           acceleration: Number((9.7 + Math.random() * 0.4).toFixed(2)),
           gyro: Number((Math.random() * 0.1).toFixed(2)),
+          temperature: Number((24 + Math.random() * 8).toFixed(1)),
           battery: Math.floor(Math.random() * 100),
           batteryVoltage: Number((3.0 + Math.random() * 1.2).toFixed(2)),
           charging: Math.random() > 0.5,
           powerStatus: Math.random() > 0.15 ? "charging" : "no_battery",
-          networkType: Math.random() > 0.5 ? "GSM" : "offline",
+          networkType: Math.random() > 0.5 ? "wifi" : "offline",
           wifiStatus: Math.random() > 0.5 ? "connected" : "disconnected",
-          gsmStatus: Math.random() > 0.5 ? "good" : "weak",
-          gsm: Math.floor(10 + Math.random() * 90),
+          gsmStatus: "offline",
+          gsm: 0,
+          ipAddress: "192.168.1.24",
+          firmware: "v2.2.0",
+          alarmActive: type !== "normal",
         }),
       });
 
@@ -560,9 +577,14 @@ function App() {
                     <small>WiFi: {wifiStatus}</small>
                   </span>
                   <span>
-                    GSM
-                    <b>{live?.gsm ?? stats.avgGsm}%</b>
-                    <small>{gsmStatus}</small>
+                    Temperature
+                    <b>{temperature}°C</b>
+                    <small>MPU6050 sensor</small>
+                  </span>
+                  <span>
+                    Alarm
+                    <b>{alarmActive ? "Active" : "Inactive"}</b>
+                    <small>Buzzer state</small>
                   </span>
                 </div>
               </div>
@@ -584,7 +606,7 @@ function App() {
               <div className="quickCard gradientThree hoverLift">
                 <span>Motion Sensor</span>
                 <strong>{acceleration}</strong>
-                <p>Acceleration value from ESP32 payload</p>
+                <p>Gyro: {gyro} · Temp: {temperature}°C</p>
               </div>
             </section>
 
@@ -599,7 +621,18 @@ function App() {
                 sortOrder={sortOrder}
                 setSortOrder={setSortOrder}
               />
-              <PriorityPanel stats={stats} status={live} acceleration={acceleration} gyro={gyro} powerLabel={powerLabel} networkLabel={networkLabel} />
+              <PriorityPanel
+                stats={stats}
+                status={live}
+                acceleration={acceleration}
+                gyro={gyro}
+                temperature={temperature}
+                powerLabel={powerLabel}
+                networkLabel={networkLabel}
+                firmware={firmware}
+                ipAddress={ipAddress}
+                alarmActive={alarmActive}
+              />
             </section>
           </>
         )}
@@ -624,6 +657,10 @@ function App() {
                 <span>Signal <b>{live?.gsm ?? stats.avgGsm}%</b></span>
                 <span>Acceleration <b>{acceleration}</b></span>
                 <span>Gyroscope <b>{gyro}</b></span>
+                <span>Temperature <b>{temperature}°C</b></span>
+                <span>Alarm Active <b>{alarmActive ? "Yes" : "No"}</b></span>
+                <span>IP Address <b>{ipAddress}</b></span>
+                <span>Firmware <b>{firmware}</b></span>
                 <span>Latest Incident <b>{stats.latestType}</b></span>
                 <span>Last Update <b>{stats.lastUpdate}</b></span>
               </div>
@@ -810,6 +847,10 @@ function App() {
             <div className="deviceRow">Battery State <span>{batteryState}</span></div>
             <div className="deviceRow">Power Source <span>{powerLabel}</span></div>
             <div className="deviceRow">Gyroscope <span>{gyro}</span></div>
+            <div className="deviceRow">Temperature <span>{temperature}°C</span></div>
+            <div className="deviceRow">IP Address <span>{ipAddress}</span></div>
+            <div className="deviceRow">Firmware <span>{firmware}</span></div>
+            <div className="deviceRow">Alarm Active <span>{alarmActive ? "Yes" : "No"}</span></div>
           </section>
         )}
       </main>
@@ -892,8 +933,8 @@ function IncidentLogs({
               <strong>{event.type || "event"}</strong>
               <p>
                 Device: {event.deviceId || "ESP32-FD-001"} · Battery: {event.battery ?? "N/A"}% ·
-                Network: {event.networkType || event.network || "N/A"} · GSM: {event.gsm ?? "N/A"}% ·
-                Gyro: {event.gyro ?? event.gyroscope ?? "N/A"}
+                Status: {event.status || "N/A"} · Network: {event.networkType || event.network || "N/A"} ·
+                Gyro: {event.gyro ?? event.gyroscope ?? "N/A"} · Temp: {event.temperature ?? "N/A"}°C
               </p>
             </div>
             <time>{event.createdAt || event.timestamp || event.time || "No time"}</time>
@@ -904,7 +945,7 @@ function IncidentLogs({
   );
 }
 
-function PriorityPanel({ stats, status, acceleration, gyro, powerLabel, networkLabel }) {
+function PriorityPanel({ stats, status, acceleration, gyro, temperature, powerLabel, networkLabel, firmware, ipAddress, alarmActive }) {
   return (
     <div className="panel">
       <h3>Priority Alert</h3>
@@ -919,6 +960,10 @@ function PriorityPanel({ stats, status, acceleration, gyro, powerLabel, networkL
       <div className="deviceRow">Gyroscope <span>{gyro}</span></div>
       <div className="deviceRow">Power <span>{powerLabel}</span></div>
       <div className="deviceRow">Network <span>{networkLabel}</span></div>
+      <div className="deviceRow">Temperature <span>{temperature}°C</span></div>
+      <div className="deviceRow">Firmware <span>{firmware}</span></div>
+      <div className="deviceRow">IP Address <span>{ipAddress}</span></div>
+      <div className="deviceRow">Alarm <span>{alarmActive ? "Active" : "Inactive"}</span></div>
     </div>
   );
 }

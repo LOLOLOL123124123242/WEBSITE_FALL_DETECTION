@@ -1502,3 +1502,60 @@ body[data-theme="light"] .barTrack {
     display: none;
   }
 }
+
+
+/* Fix dropdown readability in dark/night mode */
+select {
+  color-scheme: dark;
+}
+
+select option {
+  background: #102019;
+  color: #effcf4;
+}
+
+body[data-theme="light"] select {
+  color-scheme: light;
+}
+
+body[data-theme="light"] select option {
+  background: #ffffff;
+  color: #0b1f15;
+}
+
+.toolbar select,
+.filtersBar select {
+  appearance: auto;
+  min-width: 130px;
+  background:
+    linear-gradient(135deg, rgba(255,255,255,.09), rgba(255,255,255,.04));
+}
+
+body[data-theme="light"] .toolbar select,
+body[data-theme="light"] .filtersBar select {
+  background: rgba(255,255,255,.92);
+}
+
+/* More comfortable sensor cards */
+.miniStats span b,
+.deviceRow span {
+  word-break: break-word;
+}
+
+.deviceRow span {
+  max-width: 65%;
+  text-align: right;
+}
+
+@media (max-width: 760px) {
+  .deviceRow {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .deviceRow span {
+    margin-left: 0;
+    max-width: 100%;
+    text-align: left;
+  }
+}
