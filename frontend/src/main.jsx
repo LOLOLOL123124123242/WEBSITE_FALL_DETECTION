@@ -5,10 +5,29 @@ import "./style.css";
 const API =
   import.meta.env.VITE_API_URL || "https://website-fall-detection.onrender.com";
 
+function normalizeEvent(event) {
+  if (!event) return {};
+  const data = event.data || event.raw || event.payload || {};
+  return { ...data, ...event };
+}
+
+function valueFrom(obj, keys, fallback = "N/A") {
+  for (const key of keys) {
+    if (obj && obj[key] !== undefined && obj[key] !== null && obj[key] !== "") return obj[key];
+  }
+  return fallback;
+}
+
+function toNumber(value, fallback = null) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
 function App() {
   const [mode, setMode] = useState("login");
   const [activeTab, setActiveTab] = useState("dashboard");
-  const [email, setEmail] = useState("admin@fallsafe.local");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState(localStorage.getItem("lastEmail") || "");
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
   const [toast, setToast] = useState("");
@@ -56,37 +75,92 @@ function App() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
+  function getAuthError(data, fallback) {
+    return data?.error || data?.message || fallback;
+  }
+
+  async function requestJson(path, body) {
+    const res = await fetch(`${API}${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+    const text = await res.text();
+    let data = {};
+
+    try {
+      data = text ? JSON.parse(text) : {};
+    } catch {
+      throw new Error("Server returned an invalid response. Check backend URL or routes.");
+    }
+
+    return { res, data };
+  }
+
+  function validateAuth() {
+    const normalizedEmail = email.trim().toLowerCase();
+
+    if (!normalizedEmail || !normalizedEmail.includes("@")) {
+      return "Please enter a valid email address.";
+    }
+
+    if (!password || password.length < 6) {
+      return "Password must be at least 6 characters.";
+    }
+
+    if (mode === "register" && !name.trim()) {
+      return "Please enter your name.";
+    }
+
+    return "";
+  }
+
   async function authSubmit() {
     const endpoint = mode === "login" ? "/api/auth/login" : "/api/auth/register";
+    const normalizedEmail = email.trim().toLowerCase();
+    const validationError = validateAuth();
+
+    if (validationError) {
+      setMessage(validationError);
+      return;
+    }
 
     try {
       setLoading(true);
       setMessage("");
 
-      const res = await fetch(`${API}${endpoint}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      });
+      const body =
+        mode === "register"
+          ? { name: name.trim(), email: normalizedEmail, password }
+          : { email: normalizedEmail, password };
 
-      const data = await res.json();
+      let { res, data } = await requestJson(endpoint, body);
+
+      // Fallback support for older backend routes, if they exist.
+      if (res.status === 404) {
+        const fallbackEndpoint = mode === "login" ? "/api/login" : "/api/register";
+        ({ res, data } = await requestJson(fallbackEndpoint, body));
+      }
 
       if (!res.ok) {
-        setMessage(data.message || `${mode} failed`);
+        setMessage(getAuthError(data, mode === "login" ? "Login failed." : "Registration failed."));
         return;
       }
 
-      if (mode === "register") {
-        setMessage("✅ Account created. Now log in.");
-        setMode("login");
+      if (!data.token) {
+        setMessage("Authentication succeeded, but backend did not return a token.");
         return;
       }
 
       localStorage.setItem("token", data.token);
+      localStorage.setItem("lastEmail", normalizedEmail);
+      setEmail(normalizedEmail);
       setToken(data.token);
-      showToast("Login successful");
-    } catch {
-      setMessage("❌ Server connection error");
+      setMessage("");
+      showToast(mode === "register" ? "Account created and logged in" : "Login successful");
+    } catch (err) {
+      setMessage(`❌ ${err.message || "Server connection error"}`);
     } finally {
       setLoading(false);
     }
@@ -104,8 +178,14 @@ function App() {
         fetch(`${API}/api/analytics`, { headers }),
       ]);
 
-      if (eventsRes.ok) setEvents(await eventsRes.json());
-      if (statusRes.ok) setStatus(await statusRes.json());
+      if (eventsRes.ok) {
+        const data = await eventsRes.json();
+        setEvents(Array.isArray(data) ? data.map(normalizeEvent) : []);
+      }
+      if (statusRes.ok) {
+        const data = await statusRes.json();
+        setStatus(normalizeEvent(data?.latestEvent ? { ...data.latestEvent, online: data.online } : data));
+      }
       if (analyticsRes.ok) setAnalytics(await analyticsRes.json());
     } catch {
       showToast("Dashboard refresh failed");
@@ -158,6 +238,17 @@ function App() {
         latestEvent?.createdAt || latestEvent?.timestamp || latestEvent?.time || "No update yet",
     };
   }, [events, analytics, live]);
+
+  const latitude = toNumber(valueFrom(live, ["latitude", "lat"], null));
+  const longitude = toNumber(valueFrom(live, ["longitude", "lng", "lon"], null));
+  const hasLocation = latitude !== null && longitude !== null && !(latitude === 0 && longitude === 0);
+  const mapUrl = hasLocation ? `https://maps.google.com/maps?q=${latitude},${longitude}&z=15&output=embed` : "";
+  const externalMapUrl = hasLocation ? `https://maps.google.com/?q=${latitude},${longitude}` : "";
+  const ax = valueFrom(live, ["ax", "latestAx"], "N/A");
+  const ay = valueFrom(live, ["ay", "latestAy"], "N/A");
+  const az = valueFrom(live, ["az", "latestAz"], "N/A");
+  const phone = valueFrom(live, ["phone", "emergencyNumber"], "Not configured");
+  const deviceIdLive = valueFrom(live, ["deviceId", "device_id"], "ESP32-FD-001");
 
   const filteredEvents = useMemo(() => {
     let list = [...events];
@@ -232,6 +323,11 @@ function App() {
   const wifiStatus = live?.wifiStatus || "unknown";
   const gsmStatus = live?.gsmStatus || "unknown";
   const acceleration = live?.acceleration ?? "N/A";
+  const accelerationChange =
+    live?.movementChange ?? live?.accelerationChange ?? live?.deltaAcceleration ?? "N/A";
+  const impactAcceleration =
+    live?.impactAcceleration ?? live?.maxImpactAcceleration ?? "N/A";
+  const fallState = live?.fallState || live?.detectionState || "normal";
   const temperature = live?.temperature ?? "N/A";
   const firmware = live?.firmware || "v2.2.0";
   const ipAddress = live?.ipAddress || "N/A";
@@ -269,13 +365,16 @@ function App() {
 
   function exportCSV() {
     const rows = [
-      ["Time", "Device", "Type", "Status", "Acceleration", "Gyro", "Temperature", "Battery", "Voltage", "Charging", "Power", "Network", "WiFi", "GSM Status", "GSM Signal", "IP Address", "Firmware", "Alarm Active"],
+      ["Time", "Device", "Type", "Status", "Fall State", "Acceleration", "Acceleration Change", "Impact Acceleration", "Gyro", "MPU Temperature", "Battery", "Voltage", "Charging", "Power", "Network", "WiFi", "GSM Status", "GSM Signal", "IP Address", "Firmware", "Alarm Active"],
       ...events.map((e) => [
         e.createdAt || e.timestamp || e.time || "",
         e.deviceId || "ESP32-FD-001",
         e.type || "event",
         e.status || "",
+        e.fallState || e.detectionState || "",
         e.acceleration ?? "",
+        e.movementChange ?? e.accelerationChange ?? e.deltaAcceleration ?? "",
+        e.impactAcceleration ?? e.maxImpactAcceleration ?? "",
         e.gyro ?? e.gyroscope ?? "",
         e.temperature ?? "",
         e.battery ?? "",
@@ -321,6 +420,9 @@ function App() {
           type,
           status: type === "normal" ? "online" : "warning",
           acceleration: Number((9.7 + Math.random() * 0.4).toFixed(2)),
+          movementChange: Number((Math.random() * 2.2).toFixed(2)),
+          impactAcceleration: type === "fall" ? Number((23 + Math.random() * 6).toFixed(2)) : 0,
+          fallState: type === "fall" ? "confirmed_fall" : type === "sos" ? "manual_sos" : "normal",
           gyro: Number((Math.random() * 0.1).toFixed(2)),
           temperature: Number((24 + Math.random() * 8).toFixed(1)),
           battery: Math.floor(Math.random() * 100),
@@ -377,22 +479,36 @@ function App() {
             <div className="divider">secure account access</div>
 
             <div className="authForm">
+              {mode === "register" && (
+                <input
+                  type="text"
+                  placeholder="Full name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                />
+              )}
+
               <input
                 type="email"
                 placeholder="Email address"
                 value={email}
+                autoComplete="email"
                 onChange={(e) => setEmail(e.target.value)}
               />
 
               <input
                 type="password"
-                placeholder="Password"
+                placeholder={mode === "register" ? "Password (minimum 6 characters)" : "Password"}
                 value={password}
+                autoComplete={mode === "register" ? "new-password" : "current-password"}
                 onChange={(e) => setPassword(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") authSubmit();
+                }}
               />
 
               <label className="keepSigned">
-                <input type="checkbox" />
+                <input type="checkbox" defaultChecked />
                 Keep me signed in until I sign out
               </label>
 
@@ -405,6 +521,7 @@ function App() {
               className="switchAuth"
               onClick={() => {
                 setMessage("");
+                setPassword("");
                 setMode(mode === "login" ? "register" : "login");
               }}
             >
@@ -421,6 +538,7 @@ function App() {
 
   const navItems = [
     ["dashboard", "⌂"],
+    ["location", "🗺"],
     ["device", "📡"],
     ["setup", "🛜"],
     ["analytics", "📊"],
@@ -430,14 +548,14 @@ function App() {
 
   function openEspSetup() {
     window.open("http://192.168.4.1", "_blank", "noopener,noreferrer");
-    showToast("Opening ESP32 setup page");
+    showToast("Opening FallDevice setup page");
   }
 
   async function copySetupText() {
     const text =
       "ESP32 WiFi Setup\n" +
       "1. Open phone WiFi settings\n" +
-      "2. Connect to ESP32-Fall-Setup\n" +
+      "2. Connect to FallDevice-Setup\n" +
       "3. Password: 12345678\n" +
       "4. Open http://192.168.4.1\n" +
       "5. Choose your WiFi network and save\n" +
@@ -606,7 +724,7 @@ function App() {
               <div className="quickCard gradientThree hoverLift">
                 <span>Motion Sensor</span>
                 <strong>{acceleration}</strong>
-                <p>Gyro: {gyro} · Temp: {temperature}°C</p>
+                <p>Gyro: {gyro} · Change: {accelerationChange}</p>
               </div>
             </section>
 
@@ -627,12 +745,54 @@ function App() {
                 acceleration={acceleration}
                 gyro={gyro}
                 temperature={temperature}
+                accelerationChange={accelerationChange}
+                impactAcceleration={impactAcceleration}
+                fallState={fallState}
                 powerLabel={powerLabel}
                 networkLabel={networkLabel}
                 firmware={firmware}
                 ipAddress={ipAddress}
                 alarmActive={alarmActive}
               />
+            </section>
+          </>
+        )}
+
+
+        {activeTab === "location" && (
+          <>
+            <section className="panel locationHero">
+              <div className="panelHead">
+                <h3>Live Location</h3>
+                <span>{hasLocation ? "Location available" : "Waiting for location"}</span>
+              </div>
+
+              {hasLocation ? (
+                <>
+                  <div className="mapFrame">
+                    <iframe title="FallSafe Location Map" src={mapUrl} loading="lazy"></iframe>
+                  </div>
+
+                  <div className="heroActions">
+                    <a className="buttonLink" href={externalMapUrl} target="_blank" rel="noreferrer">
+                      Open in Google Maps
+                    </a>
+                    <button className="warn" onClick={loadDashboard}>Refresh Location</button>
+                  </div>
+                </>
+              ) : (
+                <div className="empty">
+                  <strong>No location yet</strong>
+                  <span>The ESP32 sends latitude and longitude after WiFi location update.</span>
+                </div>
+              )}
+            </section>
+
+            <section className="metricGrid">
+              <div className="metric hoverLift"><div><span>Latitude</span><strong>{latitude ?? "N/A"}</strong><p>WiFi/IP location</p></div><i>↕</i></div>
+              <div className="metric hoverLift"><div><span>Longitude</span><strong>{longitude ?? "N/A"}</strong><p>WiFi/IP location</p></div><i>↔</i></div>
+              <div className="metric hoverLift"><div><span>Emergency Phone</span><strong>{phone}</strong><p>Configured contact</p></div><i>☎</i></div>
+              <div className="metric good hoverLift"><div><span>Device</span><strong>{deviceIdLive}</strong><p>Tracking source</p></div><i>✓</i></div>
             </section>
           </>
         )}
@@ -656,8 +816,17 @@ function App() {
                 <span>GSM Status <b>{gsmStatus}</b></span>
                 <span>Signal <b>{live?.gsm ?? stats.avgGsm}%</b></span>
                 <span>Acceleration <b>{acceleration}</b></span>
+                <span>AX <b>{ax}</b></span>
+                <span>AY <b>{ay}</b></span>
+                <span>AZ <b>{az}</b></span>
+                <span>Emergency Phone <b>{phone}</b></span>
+                <span>Latitude <b>{latitude ?? "N/A"}</b></span>
+                <span>Longitude <b>{longitude ?? "N/A"}</b></span>
+                <span>Acceleration Change <b>{accelerationChange}</b></span>
+                <span>Impact Acceleration <b>{impactAcceleration}</b></span>
                 <span>Gyroscope <b>{gyro}</b></span>
-                <span>Temperature <b>{temperature}°C</b></span>
+                <span>MPU Temperature <b>{temperature}°C</b></span>
+                <span>Fall State <b>{fallState}</b></span>
                 <span>Alarm Active <b>{alarmActive ? "Yes" : "No"}</b></span>
                 <span>IP Address <b>{ipAddress}</b></span>
                 <span>Firmware <b>{firmware}</b></span>
@@ -713,7 +882,7 @@ function App() {
               <div className="setupStep hoverLift">
                 <b>2</b>
                 <h4>Connect to ESP32 hotspot</h4>
-                <p>Choose <strong>ESP32-Fall-Setup</strong>.</p>
+                <p>Choose <strong>FallDevice-Setup</strong>.</p>
               </div>
 
               <div className="setupStep hoverLift">
@@ -753,7 +922,7 @@ function App() {
                 after which the device stores the credentials and begins cloud communication.”
               </blockquote>
 
-              <div className="deviceRow">Hotspot SSID <span>ESP32-Fall-Setup</span></div>
+              <div className="deviceRow">Hotspot SSID <span>FallDevice-Setup</span></div>
               <div className="deviceRow">Default Password <span>12345678</span></div>
               <div className="deviceRow">Local Setup Portal <span>http://192.168.4.1</span></div>
               <div className="deviceRow">Cloud API <span>{API}</span></div>
@@ -847,7 +1016,10 @@ function App() {
             <div className="deviceRow">Battery State <span>{batteryState}</span></div>
             <div className="deviceRow">Power Source <span>{powerLabel}</span></div>
             <div className="deviceRow">Gyroscope <span>{gyro}</span></div>
-            <div className="deviceRow">Temperature <span>{temperature}°C</span></div>
+            <div className="deviceRow">Acceleration Change <span>{accelerationChange}</span></div>
+            <div className="deviceRow">Impact Acceleration <span>{impactAcceleration}</span></div>
+            <div className="deviceRow">Fall State <span>{fallState}</span></div>
+            <div className="deviceRow">MPU Temperature <span>{temperature}°C</span></div>
             <div className="deviceRow">IP Address <span>{ipAddress}</span></div>
             <div className="deviceRow">Firmware <span>{firmware}</span></div>
             <div className="deviceRow">Alarm Active <span>{alarmActive ? "Yes" : "No"}</span></div>
@@ -933,8 +1105,9 @@ function IncidentLogs({
               <strong>{event.type || "event"}</strong>
               <p>
                 Device: {event.deviceId || "ESP32-FD-001"} · Battery: {event.battery ?? "N/A"}% ·
-                Status: {event.status || "N/A"} · Network: {event.networkType || event.network || "N/A"} ·
-                Gyro: {event.gyro ?? event.gyroscope ?? "N/A"} · Temp: {event.temperature ?? "N/A"}°C
+                Status: {event.status || "N/A"} · Acc: {event.acceleration ?? "N/A"} ·
+                Change: {event.movementChange ?? event.accelerationChange ?? event.deltaAcceleration ?? "N/A"} ·
+                Gyro: {event.gyro ?? event.gyroscope ?? "N/A"} · Loc: {event.latitude ?? "N/A"}, {event.longitude ?? "N/A"}
               </p>
             </div>
             <time>{event.createdAt || event.timestamp || event.time || "No time"}</time>
@@ -945,7 +1118,21 @@ function IncidentLogs({
   );
 }
 
-function PriorityPanel({ stats, status, acceleration, gyro, temperature, powerLabel, networkLabel, firmware, ipAddress, alarmActive }) {
+function PriorityPanel({
+  stats,
+  status,
+  acceleration,
+  gyro,
+  temperature,
+  accelerationChange,
+  impactAcceleration,
+  fallState,
+  powerLabel,
+  networkLabel,
+  firmware,
+  ipAddress,
+  alarmActive,
+}) {
   return (
     <div className="panel">
       <h3>Priority Alert</h3>
@@ -957,6 +1144,9 @@ function PriorityPanel({ stats, status, acceleration, gyro, temperature, powerLa
       <h3 style={{ marginTop: 22 }}>Device Info</h3>
       <div className="deviceRow">ESP32-FD-001 <span>{status?.status || "Online"}</span></div>
       <div className="deviceRow">Acceleration <span>{acceleration}</span></div>
+      <div className="deviceRow">Acceleration Change <span>{accelerationChange}</span></div>
+      <div className="deviceRow">Impact Acceleration <span>{impactAcceleration}</span></div>
+      <div className="deviceRow">Fall State <span>{fallState}</span></div>
       <div className="deviceRow">Gyroscope <span>{gyro}</span></div>
       <div className="deviceRow">Power <span>{powerLabel}</span></div>
       <div className="deviceRow">Network <span>{networkLabel}</span></div>
